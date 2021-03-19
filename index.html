@@ -1,9 +1,62 @@
-# WHAT IS R?
+# R语言Tushare与tidyquant获取股票数据及可视化
+Tushare提供了R语言接口，token可以在Tushare网站上申请
 
-R is a programming language and environment for statistical computing and graphics. The software is free and open-source.
+tidyquant使用tibble进行数据操作，与tidyverse的语法比较类似
 
-R provides wide variety of statistical and graphical techniques, and is highly extensible (i.e. designed so that users or developers can expand or add to its capabilities). There are many user written packages. 
+- 获取Tushare中A股五粮液（000858）股票数据
 
-The following is pulled from the "About R" section of the R Project's website (https://www.r-project.org/about.html)
+```{R}
+library(tidyquant)
+library(Tushare)
+library(tidyverse)
+api <- pro_api(token = '需要自行申请')
+bar <- pro_bar(token = '需要自行申请')
 
-R is an integrated suite of software facilities for data manipulation, calculation and graphical display. It includes an effective data handling and storage facility, a suite of operators for calculations on arrays, in particular matrices, a large, coherent, integrated collection of intermediate tools for data analysis, graphical facilities for data analysis and display either on-screen or on hardcopy, and a well-developed, simple and effective programming language which includes conditionals, loops, user-defined recursive functions and input and output facilities.
+wly <- api(api_name = 'daily', ts_code = "000858.SZ", start_date = "20200101", end_date = "20210226")
+
+```
+- 将Tushare trade_date变量由字符型转为日期型，然后将data.frame转为tibble    
+```{R} 
+  library(lubridate)
+
+wly <- wly %>% mutate(trade_date=ymd(trade_date))
+as_tibble(wly)     
+       
+
+```
+- 计算SMA、MACD指标
+```{R}
+# 计算SMA
+wly <- wly %>%
+  tq_mutate(select = close, mutate_fun = SMA, n = 5,col_name="SMA")
+# 计算MACD
+  wly <- wly %>%
+    tq_mutate(select     = close, 
+              mutate_fun = MACD, 
+              col_rename = c("MACD", "Signal"))  
+ wly <- wly %>% mutate(macd_n=2*(MACD-Signal))
+ (wly0226 <- wly %>% filter(trade_date=="2021-02-26"))
+
+
+
+
+```
+  
+  
+- 可视化五粮液股票K线图，加入移动平均线和布林带
+```{R}
+  wly %>%
+    filter(trade_date >= '2020-11-01') %>%
+  ggplot(aes(x = trade_date, y = close)) +
+    geom_candlestick(aes(open = open, high = high, low = low, close = close)) +
+    geom_ma(ma_fun =SMA, n = 10, color = "darkblue", size = 0.5,linetype=1) +
+    geom_ma(ma_fun = SMA, n = 30, color = "red") +
+    geom_bbands(aes(high = high, low = low, close = close),ma_fun = SMA, n = 20)+
+    labs(title = "Candlestick Chart", 
+         subtitle = "Experimenting with Mulitple Stocks",
+         y = "Closing Price", x = "") + 
+    facet_wrap(~ ts_code, ncol = 2, scale = "free_y") +
+    theme_tq() 
+  
+  
+```
